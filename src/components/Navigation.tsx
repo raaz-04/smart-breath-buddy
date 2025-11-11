@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Bell, Menu, User, LogOut, Home, Activity, BookOpen, Gamepad2 } from "lucide-react";
+import { Menu, User, LogOut, Home, Activity, BookOpen, Gamepad2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 
 export const Navigation = () => {
   const navigate = useNavigate();
@@ -90,9 +91,7 @@ export const Navigation = () => {
         <div className="flex items-center gap-2">
           {user ? (
             <>
-              <Button variant="ghost" size="icon">
-                <Bell className="h-5 w-5" />
-              </Button>
+              <NotificationsPanel userId={user.id} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
