@@ -61,6 +61,51 @@ export type Database = {
           },
         ]
       }
+      breathing_sessions: {
+        Row: {
+          created_at: string
+          date: string
+          feedback_message: string | null
+          holding_time: number | null
+          id: string
+          inhalation_duration: number | null
+          inhalation_strength: number | null
+          orientation_angle: number | null
+          result: string
+          score: number | null
+          session_type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          feedback_message?: string | null
+          holding_time?: number | null
+          id?: string
+          inhalation_duration?: number | null
+          inhalation_strength?: number | null
+          orientation_angle?: number | null
+          result: string
+          score?: number | null
+          session_type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          feedback_message?: string | null
+          holding_time?: number | null
+          id?: string
+          inhalation_duration?: number | null
+          inhalation_strength?: number | null
+          orientation_angle?: number | null
+          result?: string
+          score?: number | null
+          session_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       devices: {
         Row: {
           battery_level: number | null
