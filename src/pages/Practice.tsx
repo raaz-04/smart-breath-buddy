@@ -3,15 +3,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { Progress } from "@/components/ui/progress";
-import { Play, Pause, RotateCcw, Star, CheckCircle2, AlertCircle, SmartphoneCharging } from "lucide-react";
+import { Play, Pause, RotateCcw, Star, CheckCircle2, AlertCircle, SmartphoneCharging, TrendingUp, Calendar, Target } from "lucide-react";
 import breathingBuddy from "@/assets/breathing-buddy.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInhalationLogs } from "@/hooks/useRealtimeInhalationLogs";
 import { useRealtimeDevice } from "@/hooks/useRealtimeDevice";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isWithinInterval } from "date-fns";
 
 type BreathingPhase = "ready" | "inhale" | "hold" | "exhale" | "complete";
+
+interface BreathingSession {
+  id: string;
+  date: string;
+  result: string;
+  score: number;
+  inhalation_strength: number;
+  inhalation_duration: number;
+  holding_time: number;
+}
 
 const Practice = () => {
   const [userId, setUserId] = useState<string>();
@@ -22,6 +35,8 @@ const Practice = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [breathingScale, setBreathingScale] = useState(1);
   const [sessionScore, setSessionScore] = useState(0);
+  const [sessions, setSessions] = useState<BreathingSession[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const { logs } = useRealtimeInhalationLogs(userId);
   const { device } = useRealtimeDevice(userId);
@@ -31,6 +46,28 @@ const Practice = () => {
       if (user) setUserId(user.id);
     });
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchSessions();
+  }, [userId]);
+
+  const fetchSessions = async () => {
+    if (!userId) return;
+    
+    const thirtyDaysAgo = subDays(new Date(), 30);
+    const { data, error } = await supabase
+      .from("breathing_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("date", thirtyDaysAgo.toISOString())
+      .order("date", { ascending: true });
+
+    if (!error && data) {
+      setSessions(data);
+    }
+    setLoading(false);
+  };
 
   const steps = [
     { title: "Shake inhaler", description: "Shake your inhaler and attach to spacer" },
@@ -117,7 +154,95 @@ const Practice = () => {
       session_type: "guided",
       score: sessionScore,
     });
+    
+    // Refresh sessions after saving
+    fetchSessions();
   };
+
+  // Analytics calculations
+  const getWeeklyData = () => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+    const daysOfWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+    return daysOfWeek.map((day) => {
+      const daySessions = sessions.filter((s) =>
+        isWithinInterval(new Date(s.date), {
+          start: day,
+          end: new Date(day.getTime() + 24 * 60 * 60 * 1000 - 1),
+        })
+      );
+
+      const perfectCount = daySessions.filter((s) => s.result === "perfect").length;
+      const avgScore = daySessions.length > 0
+        ? daySessions.reduce((sum, s) => sum + s.score, 0) / daySessions.length
+        : 0;
+
+      return {
+        day: format(day, "EEE"),
+        sessions: daySessions.length,
+        perfectSessions: perfectCount,
+        avgScore: Math.round(avgScore),
+        date: format(day, "MMM d"),
+      };
+    });
+  };
+
+  const getAccuracyTrend = () => {
+    const last14Days = Array.from({ length: 14 }, (_, i) => subDays(new Date(), 13 - i));
+
+    return last14Days.map((day) => {
+      const daySessions = sessions.filter((s) =>
+        isWithinInterval(new Date(s.date), {
+          start: day,
+          end: new Date(day.getTime() + 24 * 60 * 60 * 1000 - 1),
+        })
+      );
+
+      const perfectRate = daySessions.length > 0
+        ? (daySessions.filter((s) => s.result === "perfect").length / daySessions.length) * 100
+        : 0;
+
+      return {
+        date: format(day, "MM/dd"),
+        accuracy: Math.round(perfectRate),
+        sessions: daySessions.length,
+      };
+    });
+  };
+
+  const getResultDistribution = () => {
+    const resultCounts = sessions.reduce((acc, session) => {
+      acc[session.result] = (acc[session.result] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(resultCounts).map(([name, value]) => ({ name, value }));
+  };
+
+  const getTechniqueMetrics = () => {
+    if (sessions.length === 0) return null;
+
+    const avgStrength = sessions.reduce((sum, s) => sum + (s.inhalation_strength || 0), 0) / sessions.length;
+    const avgDuration = sessions.reduce((sum, s) => sum + (s.inhalation_duration || 0), 0) / sessions.length;
+    const avgHoldTime = sessions.reduce((sum, s) => sum + (s.holding_time || 0), 0) / sessions.length;
+    const completionRate = (sessions.filter(s => s.result === "perfect").length / sessions.length) * 100;
+
+    return {
+      avgStrength: avgStrength.toFixed(2),
+      avgDuration: avgDuration.toFixed(1),
+      avgHoldTime: avgHoldTime.toFixed(1),
+      completionRate: completionRate.toFixed(1),
+      totalSessions: sessions.length,
+    };
+  };
+
+  const weeklyData = getWeeklyData();
+  const accuracyTrend = getAccuracyTrend();
+  const resultDistribution = getResultDistribution();
+  const techniqueMetrics = getTechniqueMetrics();
+
+  const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--muted))"];
 
   const handleReset = () => {
     setProgress(0);
@@ -377,6 +502,302 @@ const Practice = () => {
               <p className="text-center text-sm text-muted-foreground">
                 You've earned {stars} out of 5 stars today! Keep practicing!
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Analytics Dashboard */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Progress Analytics
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="weekly" className="space-y-4">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="weekly">Weekly</TabsTrigger>
+                  <TabsTrigger value="accuracy">Accuracy</TabsTrigger>
+                  <TabsTrigger value="metrics">Metrics</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="weekly" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          This Week
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {weeklyData.reduce((sum, d) => sum + d.sessions, 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Total sessions</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Perfect
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-success">
+                          {weeklyData.reduce((sum, d) => sum + d.perfectSessions, 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Perfect attempts</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Target className="h-4 w-4" />
+                          Avg Score
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {Math.round(
+                            weeklyData.reduce((sum, d) => sum + d.avgScore, 0) / 
+                            weeklyData.filter(d => d.sessions > 0).length || 0
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Out of 100</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={weeklyData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="day" 
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis 
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "var(--radius)",
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="sessions" fill="hsl(var(--primary))" name="Total Sessions" />
+                        <Bar dataKey="perfectSessions" fill="hsl(var(--success))" name="Perfect Sessions" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="accuracy" className="space-y-4">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold">14-Day Accuracy Trend</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Track your breathing technique improvement over the past two weeks
+                    </p>
+                  </div>
+
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={accuracyTrend}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                        />
+                        <YAxis 
+                          className="text-xs"
+                          tick={{ fill: "hsl(var(--muted-foreground))" }}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "var(--radius)",
+                          }}
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="accuracy" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={2}
+                          name="Accuracy %"
+                          dot={{ fill: "hsl(var(--primary))" }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {resultDistribution.length > 0 && (
+                    <>
+                      <div className="space-y-2 mt-6">
+                        <h3 className="text-sm font-semibold">Result Distribution</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Breakdown of your breathing session results
+                        </p>
+                      </div>
+                      <div className="h-[250px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={resultDistribution}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={80}
+                              fill="hsl(var(--primary))"
+                              dataKey="value"
+                            >
+                              {resultDistribution.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip 
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--background))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "var(--radius)",
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="metrics" className="space-y-4">
+                  {techniqueMetrics ? (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">
+                              Avg Strength
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">{techniqueMetrics.avgStrength}</div>
+                            <p className="text-xs text-muted-foreground">Flow rate</p>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">
+                              Avg Duration
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">{techniqueMetrics.avgDuration}s</div>
+                            <p className="text-xs text-muted-foreground">Inhalation time</p>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">
+                              Avg Hold Time
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold">{techniqueMetrics.avgHoldTime}s</div>
+                            <p className="text-xs text-muted-foreground">Breath holding</p>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-xs font-medium text-muted-foreground">
+                              Success Rate
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold text-success">
+                              {techniqueMetrics.completionRate}%
+                            </div>
+                            <p className="text-xs text-muted-foreground">Perfect sessions</p>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      <Card className="bg-primary/5 border-primary/20">
+                        <CardContent className="pt-6">
+                          <div className="space-y-2">
+                            <h3 className="font-semibold flex items-center gap-2">
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                              Overall Performance
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              You've completed <span className="font-bold text-foreground">{techniqueMetrics.totalSessions}</span> breathing sessions 
+                              with a <span className="font-bold text-success">{techniqueMetrics.completionRate}%</span> success rate.
+                            </p>
+                            {parseFloat(techniqueMetrics.completionRate) >= 70 && (
+                              <p className="text-sm font-medium text-success">
+                                🎉 Excellent progress! Keep up the great work!
+                              </p>
+                            )}
+                            {parseFloat(techniqueMetrics.completionRate) < 70 && parseFloat(techniqueMetrics.completionRate) >= 50 && (
+                              <p className="text-sm font-medium text-primary">
+                                👍 Good job! Keep practicing to improve your technique.
+                              </p>
+                            )}
+                            {parseFloat(techniqueMetrics.completionRate) < 50 && (
+                              <p className="text-sm font-medium text-warning">
+                                💪 Keep practicing! Consistency is key to improvement.
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-semibold">Technique Recommendations</h3>
+                        <div className="space-y-2">
+                          {parseFloat(techniqueMetrics.avgDuration) < 3 && (
+                            <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                              <AlertCircle className="h-4 w-4 text-warning mt-0.5" />
+                              <div className="text-sm">
+                                <span className="font-medium">Slow down your inhalation:</span> Try to breathe in for 3-5 seconds for better medication delivery.
+                              </div>
+                            </div>
+                          )}
+                          {parseFloat(techniqueMetrics.avgHoldTime) < 8 && (
+                            <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                              <AlertCircle className="h-4 w-4 text-warning mt-0.5" />
+                              <div className="text-sm">
+                                <span className="font-medium">Increase hold time:</span> Hold your breath for at least 10 seconds to allow medication to settle in your lungs.
+                              </div>
+                            </div>
+                          )}
+                          {parseFloat(techniqueMetrics.completionRate) >= 80 && (
+                            <div className="flex items-start gap-2 p-3 bg-success/10 border border-success/20 rounded-lg">
+                              <CheckCircle2 className="h-4 w-4 text-success mt-0.5" />
+                              <div className="text-sm">
+                                <span className="font-medium">Excellent technique!</span> Your breathing pattern is optimal for effective medication delivery.
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>Complete some breathing sessions to see your technique metrics.</p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
