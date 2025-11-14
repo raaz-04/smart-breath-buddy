@@ -40,6 +40,8 @@ const Practice = () => {
   const [sessionScore, setSessionScore] = useState(0);
   const [sessions, setSessions] = useState<BreathingSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentCycle, setCurrentCycle] = useState(0);
+  const [totalCycles] = useState(3); // 3 breathing cycles per session
 
   const { logs } = useRealtimeInhalationLogs(userId);
   const { device } = useRealtimeDevice(userId);
@@ -86,20 +88,69 @@ const Practice = () => {
     setCurrentStep(0);
     setProgress(0);
     setSessionScore(0);
+    setCurrentCycle(0);
     
     if (isVoiceEnabled) {
-      speak("Let's begin your breathing practice. Get ready.");
+      speak("Let's begin your breathing practice. We'll do 3 breathing cycles together. Get ready.");
     }
     
-    runBreathingCycle();
+    runBreathingSession();
   };
 
-  const runBreathingCycle = async () => {
+  const runBreathingSession = async () => {
+    for (let cycle = 0; cycle < totalCycles; cycle++) {
+      if (!isPlaying) break;
+      
+      setCurrentCycle(cycle + 1);
+      
+      if (isVoiceEnabled && cycle > 0) {
+        speak(`Cycle ${cycle + 1} of ${totalCycles}`);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+      
+      await runSingleCycle(cycle);
+      
+      // Rest between cycles (except after last cycle)
+      if (cycle < totalCycles - 1 && isPlaying) {
+        setCurrentPhase("ready");
+        if (isVoiceEnabled) {
+          speak("Good. Take a moment to rest, then we'll continue.");
+        }
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
+
+    // Complete all cycles
+    if (isPlaying) {
+      setCurrentPhase("complete");
+      setCurrentStep(4);
+      setProgress(100);
+      setIsPlaying(false);
+      setStars((s) => Math.min(s + 1, 5));
+      setSessionScore(100);
+      
+      if (isVoiceEnabled) {
+        speak("Excellent work! You completed all 3 breathing cycles perfectly. Well done!");
+      }
+      
+      // Save session
+      if (userId) {
+        await saveBreathingSession("perfect", "Great job! Perfect breathing technique! 🎉");
+        toast.success("Session completed! You earned a star!");
+      }
+    }
+  };
+
+  const runSingleCycle = async (cycleIndex: number) => {
     const phases: { phase: BreathingPhase; duration: number; scale: number; instruction: string }[] = [
-      { phase: "inhale", duration: 4000, scale: 1.4, instruction: "Breathe in slowly through the spacer" },
+      { phase: "inhale", duration: 5000, scale: 1.4, instruction: "Breathe in slowly and deeply through the spacer" },
       { phase: "hold", duration: 10000, scale: 1.4, instruction: "Hold your breath. Keep holding" },
-      { phase: "exhale", duration: 4000, scale: 1, instruction: "Now breathe out slowly" },
+      { phase: "exhale", duration: 5000, scale: 1, instruction: "Now breathe out slowly and completely" },
     ];
+
+    const totalPhaseDuration = phases.reduce((sum, p) => sum + p.duration, 0);
+    const cycleProgressOffset = (cycleIndex / totalCycles) * 100;
+    const cycleProgressRange = 100 / totalCycles;
 
     for (let i = 0; i < phases.length; i++) {
       if (!isPlaying) break;
@@ -127,7 +178,11 @@ const Practice = () => {
           setBreathingScale(scale);
         }
         
-        setProgress((i / phases.length) * 100 + (progressPercent / phases.length) * 100);
+        // Calculate overall progress including cycle progress
+        const phaseOffset = phases.slice(0, i).reduce((sum, p) => sum + p.duration, 0);
+        const currentPhaseProgress = (phaseOffset + elapsed) / totalPhaseDuration;
+        const overallProgress = cycleProgressOffset + (currentPhaseProgress * cycleProgressRange);
+        setProgress(Math.min(overallProgress, 100));
         
         if (elapsed >= duration) {
           clearInterval(animationInterval);
@@ -136,24 +191,6 @@ const Practice = () => {
 
       await new Promise(resolve => setTimeout(resolve, duration));
       clearInterval(animationInterval);
-    }
-
-    // Complete
-    setCurrentPhase("complete");
-    setCurrentStep(4);
-    setProgress(100);
-    setIsPlaying(false);
-    setStars((s) => Math.min(s + 1, 5));
-    setSessionScore(100);
-    
-    if (isVoiceEnabled) {
-      speak("Perfect! Great job! You completed the breathing exercise successfully.");
-    }
-    
-    // Save session
-    if (userId) {
-      await saveBreathingSession("perfect", "Great job! Perfect breathing technique! 🎉");
-      toast.success("Session completed! You earned a star!");
     }
   };
 
@@ -269,6 +306,7 @@ const Practice = () => {
     setCurrentStep(0);
     setBreathingScale(1);
     setSessionScore(0);
+    setCurrentCycle(0);
     stopVoice();
   };
 
@@ -451,6 +489,11 @@ const Practice = () => {
                 <h3 className="text-xl font-bold">
                   {getPhaseInstruction()}
                 </h3>
+                {isPlaying && currentCycle > 0 && (
+                  <Badge variant="outline" className="mb-2">
+                    Cycle {currentCycle} of {totalCycles}
+                  </Badge>
+                )}
                 {currentPhase === "inhale" && (
                   <p className="text-sm text-muted-foreground">
                     Breathe in through the spacer slowly and steadily
