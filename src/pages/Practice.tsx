@@ -16,8 +16,9 @@ import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isWithinInt
 import { useVoiceCoach } from "@/hooks/useVoiceCoach";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { CustomSessionDialog, SessionSettings } from "@/components/CustomSessionDialog";
 
-type BreathingPhase = "ready" | "inhale" | "hold" | "exhale" | "complete";
+type BreathingPhase = "ready" | "inhale" | "hold" | "exhale" | "complete" | "rest";
 
 interface BreathingSession {
   id: string;
@@ -41,7 +42,14 @@ const Practice = () => {
   const [sessions, setSessions] = useState<BreathingSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentCycle, setCurrentCycle] = useState(0);
-  const [totalCycles] = useState(3); // 3 breathing cycles per session
+  const [countdown, setCountdown] = useState(0);
+  const [sessionSettings, setSessionSettings] = useState<SessionSettings>({
+    cycles: 3,
+    inhaleDuration: 5,
+    holdDuration: 10,
+    exhaleDuration: 5,
+    restDuration: 3,
+  });
 
   const { logs } = useRealtimeInhalationLogs(userId);
   const { device } = useRealtimeDevice(userId);
@@ -90,33 +98,33 @@ const Practice = () => {
     setSessionScore(0);
     setCurrentCycle(0);
     
-    if (isVoiceEnabled) {
-      speak("Let's begin your breathing practice. We'll do 3 breathing cycles together. Get ready.");
-    }
+      if (isVoiceEnabled) {
+        speak(`Let's begin your breathing practice. We'll do ${sessionSettings.cycles} breathing cycles together. Get ready.`);
+      }
     
     runBreathingSession();
   };
 
   const runBreathingSession = async () => {
-    for (let cycle = 0; cycle < totalCycles; cycle++) {
+    for (let cycle = 0; cycle < sessionSettings.cycles; cycle++) {
       if (!isPlaying) break;
       
       setCurrentCycle(cycle + 1);
       
       if (isVoiceEnabled && cycle > 0) {
-        speak(`Cycle ${cycle + 1} of ${totalCycles}`);
+        speak(`Cycle ${cycle + 1} of ${sessionSettings.cycles}`);
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
       
       await runSingleCycle(cycle);
       
       // Rest between cycles (except after last cycle)
-      if (cycle < totalCycles - 1 && isPlaying) {
-        setCurrentPhase("ready");
+      if (cycle < sessionSettings.cycles - 1 && isPlaying) {
+        setCurrentPhase("rest");
         if (isVoiceEnabled) {
           speak("Good. Take a moment to rest, then we'll continue.");
         }
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await runPhaseWithCountdown(sessionSettings.restDuration * 1000);
       }
     }
 
@@ -130,7 +138,7 @@ const Practice = () => {
       setSessionScore(100);
       
       if (isVoiceEnabled) {
-        speak("Excellent work! You completed all 3 breathing cycles perfectly. Well done!");
+        speak(`Excellent work! You completed all ${sessionSettings.cycles} breathing cycles perfectly. Well done!`);
       }
       
       // Save session
@@ -141,16 +149,34 @@ const Practice = () => {
     }
   };
 
+  const runPhaseWithCountdown = async (duration: number) => {
+    const startTime = Date.now();
+    setCountdown(Math.ceil(duration / 1000));
+    
+    const countdownInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.ceil((duration - elapsed) / 1000);
+      setCountdown(Math.max(0, remaining));
+      
+      if (elapsed >= duration) {
+        clearInterval(countdownInterval);
+      }
+    }, 100);
+
+    await new Promise(resolve => setTimeout(resolve, duration));
+    clearInterval(countdownInterval);
+  };
+
   const runSingleCycle = async (cycleIndex: number) => {
     const phases: { phase: BreathingPhase; duration: number; scale: number; instruction: string }[] = [
-      { phase: "inhale", duration: 5000, scale: 1.4, instruction: "Breathe in slowly and deeply through the spacer" },
-      { phase: "hold", duration: 10000, scale: 1.4, instruction: "Hold your breath. Keep holding" },
-      { phase: "exhale", duration: 5000, scale: 1, instruction: "Now breathe out slowly and completely" },
+      { phase: "inhale", duration: sessionSettings.inhaleDuration * 1000, scale: 1.4, instruction: "Breathe in slowly and deeply through the spacer" },
+      { phase: "hold", duration: sessionSettings.holdDuration * 1000, scale: 1.4, instruction: "Hold your breath. Keep holding" },
+      { phase: "exhale", duration: sessionSettings.exhaleDuration * 1000, scale: 1, instruction: "Now breathe out slowly and completely" },
     ];
 
     const totalPhaseDuration = phases.reduce((sum, p) => sum + p.duration, 0);
-    const cycleProgressOffset = (cycleIndex / totalCycles) * 100;
-    const cycleProgressRange = 100 / totalCycles;
+    const cycleProgressOffset = (cycleIndex / sessionSettings.cycles) * 100;
+    const cycleProgressRange = 100 / sessionSettings.cycles;
 
     for (let i = 0; i < phases.length; i++) {
       if (!isPlaying) break;
@@ -164,11 +190,15 @@ const Practice = () => {
         speak(instruction);
       }
       
-      // Animate breathing scale
+      // Animate breathing scale with countdown
       const startTime = Date.now();
+      setCountdown(Math.ceil(duration / 1000));
+      
       const animationInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
         const progressPercent = Math.min(elapsed / duration, 1);
+        const remaining = Math.ceil((duration - elapsed) / 1000);
+        setCountdown(Math.max(0, remaining));
         
         if (phase === "inhale") {
           setBreathingScale(1 + (scale - 1) * progressPercent);
@@ -187,7 +217,7 @@ const Practice = () => {
         if (elapsed >= duration) {
           clearInterval(animationInterval);
         }
-      }, 50);
+      }, 100);
 
       await new Promise(resolve => setTimeout(resolve, duration));
       clearInterval(animationInterval);
@@ -320,6 +350,8 @@ const Practice = () => {
         return "Hold your breath... Keep holding...";
       case "exhale":
         return "Now exhale slowly...";
+      case "rest":
+        return "Rest and relax...";
       case "complete":
         return "Perfect! Great job! 🎉";
       default:
@@ -471,18 +503,27 @@ const Practice = () => {
                   />
                 </div>
                 
-                {/* Breathing Phase Indicator */}
-                {currentPhase !== "ready" && currentPhase !== "complete" && (
-                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-full">
-                    <Badge 
-                      variant={currentPhase === "hold" ? "default" : "secondary"}
-                      className="text-xs uppercase tracking-wider"
-                    >
-                      {currentPhase}
-                    </Badge>
+              {/* Breathing Phase Indicator */}
+              {currentPhase !== "ready" && currentPhase !== "complete" && (
+                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-full">
+                  <Badge 
+                    variant={currentPhase === "hold" ? "default" : "secondary"}
+                    className="text-xs uppercase tracking-wider"
+                  >
+                    {currentPhase}
+                  </Badge>
+                </div>
+              )}
+              
+              {/* Countdown Timer */}
+              {isPlaying && countdown > 0 && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-12">
+                  <div className="text-6xl font-bold text-primary animate-pulse">
+                    {countdown}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
               {/* Live Instructions */}
               <div className="space-y-2 min-h-[80px]">
@@ -491,7 +532,7 @@ const Practice = () => {
                 </h3>
                 {isPlaying && currentCycle > 0 && (
                   <Badge variant="outline" className="mb-2">
-                    Cycle {currentCycle} of {totalCycles}
+                    Cycle {currentCycle} of {sessionSettings.cycles}
                   </Badge>
                 )}
                 {currentPhase === "inhale" && (
@@ -530,22 +571,32 @@ const Practice = () => {
               </div>
 
               {/* Controls */}
-              <div className="flex gap-2 justify-center">
-                {!isPlaying ? (
-                  <Button onClick={handleStart} size="lg" className="gap-2">
-                    <Play className="h-4 w-4" />
-                    Start Training
+              <div className="flex flex-col gap-3 items-center">
+                <div className="flex gap-2 justify-center">
+                  {!isPlaying ? (
+                    <Button onClick={handleStart} size="lg" className="gap-2">
+                      <Play className="h-4 w-4" />
+                      Start Training
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setIsPlaying(false)} size="lg" variant="secondary" className="gap-2">
+                      <Pause className="h-4 w-4" />
+                      Pause
+                    </Button>
+                  )}
+                  <Button onClick={handleReset} size="lg" variant="outline" className="gap-2">
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
                   </Button>
-                ) : (
-                  <Button onClick={() => setIsPlaying(false)} size="lg" variant="secondary" className="gap-2">
-                    <Pause className="h-4 w-4" />
-                    Pause
-                  </Button>
+                </div>
+                
+                {/* Custom Session Settings */}
+                {!isPlaying && (
+                  <CustomSessionDialog 
+                    settings={sessionSettings}
+                    onSettingsChange={setSessionSettings}
+                  />
                 )}
-                <Button onClick={handleReset} size="lg" variant="outline" className="gap-2">
-                  <RotateCcw className="h-4 w-4" />
-                  Reset
-                </Button>
               </div>
             </CardContent>
           </Card>
