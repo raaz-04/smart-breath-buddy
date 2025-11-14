@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { Progress } from "@/components/ui/progress";
-import { Play, Pause, RotateCcw, Star, CheckCircle2, AlertCircle, SmartphoneCharging, TrendingUp, Calendar, Target } from "lucide-react";
+import { Play, Pause, RotateCcw, Star, CheckCircle2, AlertCircle, SmartphoneCharging, TrendingUp, Calendar, Target, Volume2, VolumeX } from "lucide-react";
 import breathingBuddy from "@/assets/breathing-buddy.png";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeInhalationLogs } from "@/hooks/useRealtimeInhalationLogs";
@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval, isWithinInterval } from "date-fns";
+import { useVoiceCoach } from "@/hooks/useVoiceCoach";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 type BreathingPhase = "ready" | "inhale" | "hold" | "exhale" | "complete";
 
@@ -40,6 +43,7 @@ const Practice = () => {
 
   const { logs } = useRealtimeInhalationLogs(userId);
   const { device } = useRealtimeDevice(userId);
+  const { speak, stop: stopVoice, isSpeaking: isVoiceSpeaking, isEnabled: isVoiceEnabled, toggleEnabled: toggleVoice } = useVoiceCoach();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -82,22 +86,32 @@ const Practice = () => {
     setCurrentStep(0);
     setProgress(0);
     setSessionScore(0);
+    
+    if (isVoiceEnabled) {
+      speak("Let's begin your breathing practice. Get ready.");
+    }
+    
     runBreathingCycle();
   };
 
   const runBreathingCycle = async () => {
-    const phases: { phase: BreathingPhase; duration: number; scale: number }[] = [
-      { phase: "inhale", duration: 4000, scale: 1.4 },
-      { phase: "hold", duration: 10000, scale: 1.4 },
-      { phase: "exhale", duration: 4000, scale: 1 },
+    const phases: { phase: BreathingPhase; duration: number; scale: number; instruction: string }[] = [
+      { phase: "inhale", duration: 4000, scale: 1.4, instruction: "Breathe in slowly through the spacer" },
+      { phase: "hold", duration: 10000, scale: 1.4, instruction: "Hold your breath. Keep holding" },
+      { phase: "exhale", duration: 4000, scale: 1, instruction: "Now breathe out slowly" },
     ];
 
     for (let i = 0; i < phases.length; i++) {
       if (!isPlaying) break;
       
-      const { phase, duration, scale } = phases[i];
+      const { phase, duration, scale, instruction } = phases[i];
       setCurrentPhase(phase);
       setCurrentStep(i + 2); // +2 because steps 0 and 1 are preparation
+      
+      // Voice guidance
+      if (isVoiceEnabled) {
+        speak(instruction);
+      }
       
       // Animate breathing scale
       const startTime = Date.now();
@@ -131,6 +145,10 @@ const Practice = () => {
     setIsPlaying(false);
     setStars((s) => Math.min(s + 1, 5));
     setSessionScore(100);
+    
+    if (isVoiceEnabled) {
+      speak("Perfect! Great job! You completed the breathing exercise successfully.");
+    }
     
     // Save session
     if (userId) {
@@ -251,6 +269,7 @@ const Practice = () => {
     setCurrentStep(0);
     setBreathingScale(1);
     setSessionScore(0);
+    stopVoice();
   };
 
   const getPhaseInstruction = () => {
@@ -302,21 +321,55 @@ const Practice = () => {
       <Navigation />
       
       <div className="container py-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Breathing Trainer</h1>
-            <p className="text-muted-foreground">Master proper breathing and inhaler technique</p>
-          </div>
-          {device && (
-            <div className="flex items-center gap-2">
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Breathing Trainer</h1>
+              <p className="text-muted-foreground">Master proper breathing and inhaler technique</p>
+            </div>
+            {device && (
               <Badge variant="outline" className="gap-2">
                 {device.is_charging ? (
                   <SmartphoneCharging className="h-4 w-4 text-success" />
                 ) : null}
                 {device.battery_level}%
               </Badge>
-            </div>
-          )}
+            )}
+          </div>
+          
+          {/* Voice Coach Toggle */}
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {isVoiceEnabled ? (
+                    <Volume2 className="h-5 w-5 text-primary" />
+                  ) : (
+                    <VolumeX className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <div>
+                    <Label htmlFor="voice-coach" className="text-base font-semibold cursor-pointer">
+                      Voice Coach
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      {isVoiceEnabled ? "Voice guidance enabled for hands-free practice" : "Enable voice guidance for audio coaching"}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="voice-coach"
+                  checked={isVoiceEnabled}
+                  onCheckedChange={toggleVoice}
+                />
+              </div>
+              {isVoiceSpeaking && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-primary">
+                  <div className="animate-pulse">🎙️</div>
+                  <span>Speaking...</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="max-w-4xl mx-auto space-y-6">
