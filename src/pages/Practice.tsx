@@ -92,15 +92,26 @@ const Practice = () => {
   ];
 
   const handleStart = () => {
+    // Unlock audio on user gesture to avoid autoplay blocking
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+      }
+    } catch {}
+
     setIsPlaying(true);
     setCurrentStep(0);
     setProgress(0);
     setSessionScore(0);
     setCurrentCycle(0);
     
-      if (isVoiceEnabled) {
-        speak(`Let's begin your breathing practice. We'll do ${sessionSettings.cycles} breathing cycles together. Get ready.`);
-      }
+    if (isVoiceEnabled) {
+      speak(`Let's begin your breathing practice. We'll do ${sessionSettings.cycles} breathing cycles together. Get ready.`);
+    }
     
     runBreathingSession();
   };
@@ -516,11 +527,11 @@ const Practice = () => {
               )}
               
               {/* Countdown Timer */}
-              {isPlaying && countdown > 0 && (
+              {isPlaying && currentPhase !== "ready" && currentPhase !== "complete" && (
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                   <div className="flex flex-col items-center gap-2 bg-background/90 rounded-full p-8 shadow-2xl border-4 border-primary">
                     <div className="text-7xl font-bold text-primary">
-                      {countdown}
+                      {Math.max(countdown, 0)}
                     </div>
                     <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                       seconds
