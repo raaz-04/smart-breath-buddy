@@ -7,6 +7,8 @@ export const useVoiceCoach = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioQueue = useRef<string[]>([]);
   const isProcessingQueue = useRef(false);
+  const audioCache = useRef<Map<string, string>>(new Map());
+  const lastRequestTime = useRef<number>(0);
 
   const processQueue = useCallback(async () => {
     if (isProcessingQueue.current || audioQueue.current.length === 0) {
@@ -21,26 +23,71 @@ export const useVoiceCoach = () => {
       if (!text) continue;
 
       try {
-        const { data, error } = await supabase.functions.invoke('text-to-speech', {
-          body: { text, voice: 'Sarah' }
+        let audioContent: string;
+
+        // Check cache first
+        if (audioCache.current.has(text)) {
+          audioContent = audioCache.current.get(text)!;
+          console.log('Using cached audio for:', text);
+        } else {
+          // Rate limiting: ensure at least 800ms between requests
+          const now = Date.now();
+          const timeSinceLastRequest = now - lastRequestTime.current;
+          if (timeSinceLastRequest < 800) {
+            await new Promise(resolve => setTimeout(resolve, 800 - timeSinceLastRequest));
+          }
+          lastRequestTime.current = Date.now();
+
+          // Retry logic for rate limits
+          let retries = 0;
+          let success = false;
+          
+          while (!success && retries < 3) {
+            try {
+              const { data, error } = await supabase.functions.invoke('text-to-speech', {
+                body: { text, voice: 'Sarah' }
+              });
+
+              if (error) throw error;
+
+              if (data?.audioContent) {
+                audioContent = data.audioContent;
+                // Cache the result
+                audioCache.current.set(text, audioContent);
+                success = true;
+              } else {
+                throw new Error('No audio content received');
+              }
+            } catch (error: any) {
+              retries++;
+              if (error?.message?.includes('429') || error?.message?.includes('rate')) {
+                console.log(`Rate limited, retry ${retries}/3 after delay`);
+                // Exponential backoff
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries)));
+              } else {
+                throw error;
+              }
+            }
+          }
+
+          if (!success) {
+            console.error('Failed after 3 retries, skipping phrase');
+            continue;
+          }
+        }
+
+        // Play the audio
+        const audio = new Audio(`data:audio/mpeg;base64,${audioContent!}`);
+        audioRef.current = audio;
+
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve();
+          audio.onerror = () => reject(new Error('Audio playback failed'));
+          audio.play().catch(reject);
         });
 
-        if (error) throw error;
-
-        if (data?.audioContent) {
-          // Create audio element and play
-          const audio = new Audio(`data:audio/mpeg;base64,${data.audioContent}`);
-          audioRef.current = audio;
-
-          await new Promise<void>((resolve, reject) => {
-            audio.onended = () => resolve();
-            audio.onerror = () => reject(new Error('Audio playback failed'));
-            audio.play().catch(reject);
-          });
-
-          // Small pause between phrases
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        // Small pause between phrases
+        await new Promise(resolve => setTimeout(resolve, 300));
       } catch (error) {
         console.error('Voice coach error:', error);
       }
