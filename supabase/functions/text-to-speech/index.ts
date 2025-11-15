@@ -52,6 +52,16 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("OpenAI TTS API error:", response.status, errorText);
+      
+      // Provide more specific error messages
+      if (response.status === 429) {
+        throw new Error("Rate limit exceeded. Please wait a moment and try again.");
+      } else if (response.status === 401) {
+        throw new Error("Invalid API key");
+      } else if (response.status === 500) {
+        throw new Error("OpenAI service error");
+      }
+      
       throw new Error(`OpenAI TTS API error: ${response.status}`);
     }
 
