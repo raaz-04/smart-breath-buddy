@@ -11,58 +11,59 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voice = "alloy" } = await req.json();
+    const { text, voice = "Sarah" } = await req.json();
     
     if (!text) {
       throw new Error("Text is required");
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY not configured");
+    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    if (!ELEVENLABS_API_KEY) {
+      throw new Error("ELEVENLABS_API_KEY not configured");
     }
 
     console.log("Generating speech for text:", text);
 
-    // Voice mapping - OpenAI TTS supports these voices
+    // Voice mapping - ElevenLabs voice IDs
     const voiceMap: Record<string, string> = {
-      "Sarah": "nova",
-      "Aria": "alloy",
-      "Laura": "shimmer",
-      "Charlie": "echo"
+      "Sarah": "EXAVITQu4vr4xnSDxMaL",
+      "Aria": "9BWtsMINqrJLrRacOk9x",
+      "Laura": "FGY2WhTYpPnrIDTdsKH5",
+      "Charlie": "IKne3meq5aSn9XLyUdCD"
     };
 
-    const openaiVoice = voiceMap[voice] || "alloy";
+    const voiceId = voiceMap[voice] || "EXAVITQu4vr4xnSDxMaL";
 
-    // Call OpenAI TTS API
-    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    // Call ElevenLabs TTS API
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "xi-api-key": ELEVENLABS_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "tts-1",
-        input: text,
-        voice: openaiVoice,
-        response_format: "mp3",
+        text: text,
+        model_id: "eleven_turbo_v2",
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+        }
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("OpenAI TTS API error:", response.status, errorText);
+      console.error("ElevenLabs TTS API error:", response.status, errorText);
       
-      // Provide more specific error messages
       if (response.status === 429) {
         throw new Error("Rate limit exceeded. Please wait a moment and try again.");
       } else if (response.status === 401) {
         throw new Error("Invalid API key");
       } else if (response.status === 500) {
-        throw new Error("OpenAI service error");
+        throw new Error("ElevenLabs service error");
       }
       
-      throw new Error(`OpenAI TTS API error: ${response.status}`);
+      throw new Error(`ElevenLabs TTS API error: ${response.status}`);
     }
 
     // Get audio data
