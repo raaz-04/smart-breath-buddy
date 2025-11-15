@@ -517,9 +517,14 @@ const Practice = () => {
               
               {/* Countdown Timer */}
               {isPlaying && countdown > 0 && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-12">
-                  <div className="text-6xl font-bold text-primary animate-pulse">
-                    {countdown}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                  <div className="flex flex-col items-center gap-2 bg-background/90 rounded-full p-8 shadow-2xl border-4 border-primary">
+                    <div className="text-7xl font-bold text-primary">
+                      {countdown}
+                    </div>
+                    <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                      seconds
+                    </div>
                   </div>
                 </div>
               )}
