@@ -179,10 +179,22 @@ const Practice = () => {
   };
 
   const runSingleCycle = async (cycleIndex: number) => {
+    // Preparation phase 1: Shake inhaler
+    if (isVoiceEnabled && cycleIndex === 0) {
+      setCurrentStep(0);
+      speak("Shake inhaler");
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      // Preparation phase 2: Breathe out completely
+      setCurrentStep(1);
+      speak("Breathe out completely");
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
     const phases: { phase: BreathingPhase; duration: number; scale: number; instruction: string }[] = [
-      { phase: "inhale", duration: sessionSettings.inhaleDuration * 1000, scale: 1.4, instruction: "Breathe in slowly and deeply through the spacer" },
-      { phase: "hold", duration: sessionSettings.holdDuration * 1000, scale: 1.4, instruction: "Hold your breath. Keep holding" },
-      { phase: "exhale", duration: sessionSettings.exhaleDuration * 1000, scale: 1, instruction: "Now breathe out slowly and completely" },
+      { phase: "inhale", duration: sessionSettings.inhaleDuration * 1000, scale: 1.4, instruction: `Now press the inhaler and breathe in slowly for ${sessionSettings.inhaleDuration} seconds` },
+      { phase: "hold", duration: sessionSettings.holdDuration * 1000, scale: 1.4, instruction: `Hold your breath for ${sessionSettings.holdDuration} seconds` },
+      { phase: "exhale", duration: sessionSettings.exhaleDuration * 1000, scale: 1, instruction: "Breathe out slowly and relax" },
     ];
 
     const totalPhaseDuration = phases.reduce((sum, p) => sum + p.duration, 0);
@@ -232,6 +244,12 @@ const Practice = () => {
 
       await new Promise(resolve => setTimeout(resolve, duration));
       clearInterval(animationInterval);
+    }
+    
+    // Completion message after each cycle
+    if (isPlaying && isVoiceEnabled) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      speak("Good job, you did it well");
     }
   };
 
