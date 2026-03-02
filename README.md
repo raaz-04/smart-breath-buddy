@@ -1,73 +1,56 @@
-# Welcome to your Lovable project
+# 🌬️ Smart Spacer for Asthma Management
+Incorrect inhaler technique is a common but often overlooked issue in respiratory care. To address this, we developed Smart Breath Buddy, an IoT-driven system that monitors inhalation behavior and device usage through sensor data.
 
-## Project info
+---
+## 📸 Project Images
 
-**URL**: https://lovable.dev/projects/b0ecb22d-a6d4-4365-8d8c-4cfff096aec1
+ ![Final Hand](src/assets/finalpro.jpeg)
 
-## How can I edit this code?
+ ---
 
-There are several ways of editing your application.
+## 🎯 Project Goals
 
-**Use Lovable**
+- Monitor real-time inhaler usage
+- Detect and improve incorrect inhalation techniques
+- Provide accessible, visual feedback via a web dashboard
+- Reduce workload for healthcare professionals
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/b0ecb22d-a6d4-4365-8d8c-4cfff096aec1) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🧠 Key Features
 
-**Use your preferred IDE**
+- ✅ Real-time sensor monitoring: Tracks inhalation patterns and device usage
+- 🔧 ESP32-based firmware: Securely transmits data to the cloud
+- 🖥️ Web application dashboard: Visualizes and manages device data
+- 🔗 Full device → cloud → web workflow: End-to-end integration
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 🛠️ Design & Fabrication
 
-Follow these steps:
+- 💻 ESP32 microcontroller for IoT data acquisition
+- ☁️ Cloud integration for storage and analytics
+- 📱 Web application built to visualize and manage patient/device data
+- 🧩 System-level integration: Ensures reliable and secure communication between device, cloud, and application
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+---
+## 📸 Enclosure Design
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+ ![Final Hand](src/assets/en1.jpeg)
+ ![Final Hand](src/assets/en2.jpeg)
 
-# Step 3: Install the necessary dependencies.
-npm i
+---
+## 📸 PCB Design
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+ ![Final Hand](src/assets/pcb1.jpeg)
+ ![Final Hand](src/assets/pcb2.jpeg)
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 👨‍🔬 Developed By
 
-**Use GitHub Codespaces**
+**Rasula Geesara / Pamodhya Wijesinghe / Thisura Samuditha**  
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-## What technologies are used for this project?
 
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/b0ecb22d-a6d4-4365-8d8c-4cfff096aec1) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+---
